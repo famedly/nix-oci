@@ -91,6 +91,10 @@
       # buildOCIImage is a function, so it cannot live under `packages` (which
       # must contain derivations). legacyPackages is the escape hatch.
       legacyPackages = forAllSystems (pkgs: {
+        attestOCIImage = pkgs.callPackage ./nix/attest-image.nix {
+          nix-oci = self.packages.${pkgs.stdenv.hostPlatform.system}.nix-oci;
+        };
+
         buildOCIImage = pkgs.callPackage ./nix/build-image.nix {
           nix-oci = self.packages.${pkgs.stdenv.hostPlatform.system}.nix-oci;
         };
@@ -138,6 +142,18 @@
                 gid = 1000;
                 recursive = true;
               }
+            ];
+          };
+
+          exampleImageAttested = lib'.attestOCIImage {
+            name = "hello-oci-attested";
+            image = self.checks.${pkgs.stdenv.hostPlatform.system}.exampleImage;
+            predicateType = "https://spdx.dev/Document";
+            attestations = [
+              (pkgs.writers.writeJSON "example-attestation" {
+                SPDXID = "SPDXRef-DOCUMENT";
+                spdxVersion = "SPDX-2.2";
+              })
             ];
           };
 

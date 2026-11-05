@@ -55,6 +55,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer) error {
 		return build(args[1:], stdin, stdout, stderr)
 	case "combine":
 		return combine(args[1:], stdout, stderr)
+	case "add-attestation":
+		return addAttestation(args[1:], stdout, stderr)
 	case "plan":
 		return planCmd(args[1:], stdin, stdout, stderr)
 	case "build-layer":
@@ -77,15 +79,16 @@ func usage(w io.Writer) {
 Usage: nix-oci <command> [flags]
 
 Commands:
-  build         Write an OCI layout (or --archive) from a closure on stdin
-  combine       Merge single-platform layouts into a multi-arch image
-  version       Print the version
-  help          Show this help
+  build           Write an OCI layout (or --archive) from a closure on stdin
+  combine         Merge single-platform layouts into a multi-arch image
+  add-attestation Append attestations to single-platform layouts
+  version         Print the version
+  help            Show this help
 
 Cached-build plumbing (usually driven by the Nix functions, not by hand):
-  plan          Print the layer partition for a closure
-  build-layer   Compress one layer into a cacheable blob
-  assemble      Build a layout from precomputed layers
+  plan            Print the layer partition for a closure
+  build-layer     Compress one layer into a cacheable blob
+  assemble        Build a layout from precomputed layers
 
 Run 'nix-oci <command> -h' for a command's flags.
 `)
@@ -408,6 +411,39 @@ func combine(args []string, stdout, stderr io.Writer) error {
 	_, _ = fmt.Fprintf(stderr, "combined %d layouts into %s\n", len(inputs), *output)
 
 	return nil
+}
+
+// addAttestation adds an attestation to a single-platform layout
+func addAttestation(args []string, stdout io.Writer, stderr io.Writer) error {
+		flags := flag.NewFlagSet("addAttestation", flag.ContinueOnError)
+		flags.SetOutput(stderr)
+
+		output := flags.String("output", "", "directory to write the resulting layout into")
+		predicateType := flags.String("predicate-type", "", "the predicate type of the attestation to add")
+
+		if err := parseFlags(flags, args); err != nil {
+			return err
+		}
+
+		inputs := flags.Args()
+		if len(inputs) < 2 {
+			return fmt.Errorf("addAttestation needs a source layout, and attestations to append")
+		}
+
+		if *output == "" {
+			return fmt.Errorf("--output is required")
+		}
+
+		if *predicateType == "" {
+			return fmt.Errorf("--predicate-type is required")
+		}
+
+		if err := oci.AddAttestations(*output, inputs[0], *predicateType, inputs[1:]); err != nil {
+			return fmt.Errorf("combine: %w", err)
+		}
+
+		_, _ = fmt.Fprintf(stderr, "added %d attestations to %s\n", len(inputs) - 1, *output)
+		return nil
 }
 
 // build reads a closure (one store path per line, on stdin -- i.e. the output of
